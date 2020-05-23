@@ -126,10 +126,9 @@ check_env() {
 }
 
 set_daml_versions() {
-  daml_yaml=$1
-  [[ -f "$daml_yaml" ]] || exit 13
-  sdk_version=$(grep '^sdk-version:' "$daml_yaml" | cut -d ' ' -f2)
-  contract_version=$(grep '^version:' "$daml_yaml" | cut -d ' ' -f2)
+  [[ -f "$DAML_YAML" ]] || exit 13
+  sdk_version=$(grep '^sdk-version:' "$DAML_YAML" | cut -d ' ' -f2)
+  contract_version=$(grep '^version:' "$DAML_YAML" | cut -d ' ' -f2)
 
   VERSIONS=("$sdk_version" "$contract_version")
 }
@@ -191,12 +190,10 @@ mvn_build() {
 main() {
   echo -e "\nGenerating Maven library with DAML bindings...\n"
 
-  # Build DAR
-  local dar_file=$(daml build | sed --quiet --regexp-extended -e 's/Created\s+(.*\.dar)/\1/p')
-  # takes from last `/` and strips from last `-` (version and extension)
-  PROJECT_NAME=$(echo "$dar_file" | sed -rn -e 's|.*/(.*)(-.*)|\1|p')
-
   create_maven_project
+
+  echo "Building DAR..."
+  local dar_file=$(daml build | sed --quiet --regexp-extended -e 's/Created\s+(.*\.dar)/\1/p')
 
   # and generate bindings into Maven project src dir
   daml codegen java -o "${__output}/${PROJECT_NAME}/src/main/java" "${dar_file}=${_basepackage_}"
@@ -204,10 +201,15 @@ main() {
   mvn_build
 }
 
+# Constants
+DAML_YAML="daml.yaml"
+
 # Parse arguments
 eval "$(docopt "$@")"   # See https://github.com/andsens/docopt.sh for the magic :)
+
 check_env
-set_daml_versions daml.yaml
+PROJECT_NAME=$(grep '^name:' "$DAML_YAML" | cut -d ' ' -f2)
+set_daml_versions
 SDK_VERSION=${VERSIONS[0]}
 CONTRACT_VERSION=${VERSIONS[1]}
 main "$@"
