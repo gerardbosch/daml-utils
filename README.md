@@ -60,7 +60,7 @@ your DAML project repository.
 ## Add submodule (add the dependency)
 
 ```shell script
-git submodule add --depth=1 https://git.gft.com/daml/daml-utils
+git submodule add --depth=1 https://github.com/gerardbosch/daml-utils.git
 git config -f .gitmodules submodule.daml-utils.ignore dirty
 
 # Symlink scripts at the project's root for convenience
