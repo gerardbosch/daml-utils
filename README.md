@@ -7,7 +7,7 @@ Just a few scripts for DAML plattform.
 Example:
 
 ```shell script
-./generate-java-bindings --install com.example.daml.javabindings
+./generate-java-bindings com.example.daml.javabindings --mvncommand install
 ```
 
 Usage help:
@@ -24,8 +24,8 @@ It generates the package (mvn package) for the current directory DAML project.
     basepackage is the base Java package for the generated code (e.g. com.example)
 
     Options:
-      -i --install       Install the generated library in Maven local repository (mvn install).
-      -o --output=<dir>  The output directory for the bindings generation [default: daml.java].
+      -c --mvncommand=<maven subcommand>  Possible values are `install` and `deploy` which directly binds to Maven [default: package].
+      -o --output=<dir>                   The output directory for the bindings generation [default: daml.java].
 ```
 
 # Installation

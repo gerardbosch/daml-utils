@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-DOC="Generate Java bindings for DAML.
+DOC='Generate Java bindings for DAML.
 
 It generates the package (mvn package) for the current directory DAML project.
 
@@ -10,9 +10,10 @@ It generates the package (mvn package) for the current directory DAML project.
     basepackage is the base Java package for the generated code (e.g. com.example)
 
     Options:
-      -i --install       Install the generated library in Maven local repository (mvn install).
-      -o --output=<dir>  The output directory for the bindings generation [default: daml.java].
-"
+      -c --mvncommand=<maven subcommand>  Possible values are `install` and `deploy` which directly binds to Maven [default: package].
+      -o --output=<dir>                   The output directory for the bindings generation [default: daml.java].
+'
+
 # docopt parser below, refresh this parser with `docopt.sh generate-java-bindings`
 # shellcheck disable=2016,1075
 docopt() { parse() { if ${DOCOPT_DOC_CHECK:-true}; then local doc_hash
@@ -80,13 +81,8 @@ if ! "node_$node_idx"; then left=("${initial_left[@]}"); ((testdepth--)) || true
 return 1; fi; done; if [[ $((--testdepth)) -eq 0 ]]; then
 left=("${initial_left[@]}"); for node_idx in "$@"; do "node_$node_idx"; done; fi
 return 0; }; optional() { local node_idx; for node_idx in "$@"; do
-"node_$node_idx"; done; return 0; }; switch() { local i
+"node_$node_idx"; done; return 0; }; value() { local i
 for i in "${!left[@]}"; do local l=${left[$i]}
-if [[ ${parsed_params[$l]} = "$2" ]]; then
-left=("${left[@]:0:$i}" "${left[@]:((i+1))}")
-[[ $testdepth -gt 0 ]] && return 0; if [[ $3 = true ]]; then
-eval "((var_$1++))" || true; else eval "var_$1=true"; fi; return 0; fi; done
-return 1; }; value() { local i; for i in "${!left[@]}"; do local l=${left[$i]}
 if [[ ${parsed_params[$l]} = "$2" ]]; then
 left=("${left[@]:0:$i}" "${left[@]:((i+1))}")
 [[ $testdepth -gt 0 ]] && return 0; local value
@@ -95,21 +91,22 @@ eval "var_$1+=($value)"; else eval "var_$1=$value"; fi; return 0; fi; done
 return 1; }; stdout() { printf -- "cat <<'EOM'\n%s\nEOM\n" "$1"; }; stderr() {
 printf -- "cat <<'EOM' >&2\n%s\nEOM\n" "$1"; }; error() {
 [[ -n $1 ]] && stderr "$1"; stderr "$usage"; _return 1; }; _return() {
-printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:463}
-usage=${DOC:114:57}; digest=3c300; shorts=(-o -i); longs=(--output --install)
-argcounts=(1 0); node_0(){ value __output 0; }; node_1(){ switch __install 1; }
-node_2(){ value _basepackage_ a; }; node_3(){ optional 0 1; }; node_4(){
+printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:519}
+usage=${DOC:114:57}; digest=67625; shorts=(-o -c); longs=(--output --mvncommand)
+argcounts=(1 1); node_0(){ value __output 0; }; node_1(){ value __mvncommand 1
+}; node_2(){ value _basepackage_ a; }; node_3(){ optional 0 1; }; node_4(){
 optional 3; }; node_5(){ required 4 2; }; node_6(){ required 5; }
 cat <<<' docopt_exit() { [[ -n $1 ]] && printf "%s\n" "$1" >&2
 printf "%s\n" "${DOC:114:57}" >&2; exit 1; }'; unset var___output \
-var___install var__basepackage_; parse 6 "$@"; local prefix=${DOCOPT_PREFIX:-''}
-local docopt_decl=1; [[ $BASH_VERSION =~ ^4.3 ]] && docopt_decl=2
-unset "${prefix}__output" "${prefix}__install" "${prefix}_basepackage_"
+var___mvncommand var__basepackage_; parse 6 "$@"
+local prefix=${DOCOPT_PREFIX:-''}; local docopt_decl=1
+[[ $BASH_VERSION =~ ^4.3 ]] && docopt_decl=2; unset "${prefix}__output" \
+"${prefix}__mvncommand" "${prefix}_basepackage_"
 eval "${prefix}"'__output=${var___output:-daml.java}'
-eval "${prefix}"'__install=${var___install:-false}'
+eval "${prefix}"'__mvncommand=${var___mvncommand:-package}'
 eval "${prefix}"'_basepackage_=${var__basepackage_:-}'; local docopt_i=0
 for ((docopt_i=0;docopt_i<docopt_decl;docopt_i++)); do
-declare -p "${prefix}__output" "${prefix}__install" "${prefix}_basepackage_"
+declare -p "${prefix}__output" "${prefix}__mvncommand" "${prefix}_basepackage_"
 done; }
 # docopt parser above, complete command for generating this parser is `docopt.sh generate-java-bindings`
 
@@ -123,6 +120,12 @@ check_env() {
   [[ ! -x "$(command -v mvn)" ]] &&
     echo "mvn command not found in PATH. Install Maven and assure it is on PATH. You can install it with sdkman.io if you like :)" &&
     exit 12
+}
+
+check_args() {
+  if ! printf '%s\n' "${VALID_MVNCOMMANDS[@]}" | grep --quiet -P "^${__mvncommand}$"; then
+    docopt_exit "Invalid value for --comand: ${__mvncommand}"
+  fi
 }
 
 set_daml_versions() {
@@ -182,8 +185,7 @@ create_maven_project() {
 mvn_build() {
   (
     cd "${__output}/${PROJECT_NAME}"
-    local mvn_command=$(if "$__install"; then echo "install"; else echo "package"; fi)
-    mvn $mvn_command
+    mvn $__mvncommand
   )
 }
 
@@ -192,7 +194,7 @@ main() {
 
   create_maven_project
 
-  echo "Building DAR..."
+  echo -e "\n*****************\nBuilding DAR...\n"
   local dar_file=$(daml build | sed --quiet --regexp-extended -e 's/Created\s+(.*\.dar)/\1/p')
 
   # and generate bindings into Maven project src dir
@@ -203,11 +205,13 @@ main() {
 
 # Constants
 DAML_YAML="daml.yaml"
+VALID_MVNCOMMANDS=("package" "install" "deploy")
 
 # Parse arguments
 eval "$(docopt "$@")"   # See https://github.com/andsens/docopt.sh for the magic :)
 
 check_env
+check_args
 PROJECT_NAME=$(grep '^name:' "$DAML_YAML" | cut -d ' ' -f2)
 set_daml_versions
 SDK_VERSION=${VERSIONS[0]}
