@@ -1,13 +1,20 @@
-Just a few scripts for DAML plattform.
+*The updated version of this repository is at https://github.com/gerardbosch/daml-utils*
+
+Just a few scripts for the DAML plattform.
 
 * `generate-java-bindings` - Generates a Maven library with the DAML bindings. Run it with `--help` to see its usage.
 * `generate-scala-bindings` - TODO: Not implemented yet.
+
+# Dependencies
+* [DAML SDK](https://daml.com): Used by both building DAR and generating Java binding code.
+* **Maven**: Generate and package/install/deploy an artifact from the generated
+  binding sources.
 
 # Usage
 Example:
 
 ```shell script
-./generate-java-bindings com.example.daml.javabindings --mvncommand install
+./generate-java-bindings com.example.daml.javabinding --mvncommand install
 ```
 
 Usage help:
@@ -55,20 +62,27 @@ Another way to have these scripts in hand in your DAML projects is by adding thi
 as a Git submodule of your project. This way you bring this repository as a dependency of
 your DAML project repository.
 
-**NOTE**: You first `cd` into your DAML project.
-
 ## Add submodule (add the dependency)
 
 ```shell script
+cd to-your-daml-project  # Must be a Git project! (git init)
 git submodule add --depth=1 https://github.com/gerardbosch/daml-utils.git
 git config -f .gitmodules submodule.daml-utils.ignore dirty
 
-# Symlink scripts at the project's root for convenience
+# Symlink scripts at the project's root for convenience (care with Git for Windows)
 ln -s daml-utils/generate-java-bindings
 
 git add .gitmodules generate-java-bindings
 git commit -m "Add daml-utils submodule"
 ```
+
+**NOTE**: This installation option is portable (as travels with the repo) and
+cool. But you *may* need to run `git submodule update --init --recursive`
+after cloning the repo if submodule appears empty.
+
+**NOTE**: When using Git for Windows, you *may* need to define `symlinks = true`
+in the `[core]` section of your `~/.gitconfig` file. Otherwise UNIX symlinks are
+broken.
 
 ## Update submodule (sync with remote)
 

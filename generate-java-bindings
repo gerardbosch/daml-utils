@@ -12,6 +12,8 @@ It generates the package (mvn package) for the current directory DAML project.
     Options:
       -c --mvncommand=<maven subcommand>  Possible values are `install` and `deploy` which directly binds to Maven [default: package].
       -o --output=<dir>                   The output directory for the bindings generation [default: daml.java].
+
+    NOTE: When using the --mvncommand=deploy a file dependencyManagement.xml defining the POM section is required. This file must be in the project root.
 '
 
 # docopt parser below, refresh this parser with `docopt.sh generate-java-bindings`
@@ -91,8 +93,8 @@ eval "var_$1+=($value)"; else eval "var_$1=$value"; fi; return 0; fi; done
 return 1; }; stdout() { printf -- "cat <<'EOM'\n%s\nEOM\n" "$1"; }; stderr() {
 printf -- "cat <<'EOM' >&2\n%s\nEOM\n" "$1"; }; error() {
 [[ -n $1 ]] && stderr "$1"; stderr "$usage"; _return 1; }; _return() {
-printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:519}
-usage=${DOC:114:57}; digest=67625; shorts=(-o -c); longs=(--output --mvncommand)
+printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:674}
+usage=${DOC:114:57}; digest=86237; shorts=(-o -c); longs=(--output --mvncommand)
 argcounts=(1 1); node_0(){ value __output 0; }; node_1(){ value __mvncommand 1
 }; node_2(){ value _basepackage_ a; }; node_3(){ optional 0 1; }; node_4(){
 optional 3; }; node_5(){ required 4 2; }; node_6(){ required 5; }
@@ -116,7 +118,7 @@ check_env() {
   [[ ! -x "$(command -v daml)" ]] &&
     echo "daml command not found in PATH. Install DAML SDK and assure it is on PATH." &&
     exit 11
-    # Check Maven
+  # Check Maven
   [[ ! -x "$(command -v mvn)" ]] &&
     echo "mvn command not found in PATH. Install Maven and assure it is on PATH. You can install it with sdkman.io if you like :)" &&
     exit 12
@@ -124,10 +126,13 @@ check_env() {
 
 check_args() {
   if ! printf '%s\n' "${VALID_MVNCOMMANDS[@]}" | grep --quiet -P "^${__mvncommand}$"; then
-    docopt_exit "Invalid value for --comand: ${__mvncommand}"
+    docopt_exit "Invalid value for --mvncommand: ${__mvncommand}"
   fi
 }
 
+#---
+# Initialize DAML SDK and contract versions array.
+#---
 set_daml_versions() {
   [[ -f "$DAML_YAML" ]] || exit 13
   sdk_version=$(grep '^sdk-version:' "$DAML_YAML" | cut -d ' ' -f2)
@@ -136,6 +141,16 @@ set_daml_versions() {
   VERSIONS=("$sdk_version" "$contract_version")
 }
 
+#---
+# Gives the expected path where the POM will reside.
+#---
+pom_file_path() {
+  echo "${PROJECT_ROOT}/${__output}/${PROJECT_NAME}/pom.xml"
+}
+
+#---
+# Defined as function to dynamically resolve version placeholder.
+#---
 get_daml_bindings_dep() {
   cat <<EOF
     <dependency>
@@ -148,7 +163,7 @@ EOF
 
 generate_from_archetype() {
 
-  local pom_file="$1"
+  local pom_file=$(pom_file_path)
 
   mvn -B archetype:generate \
     -DgroupId="${_basepackage_}" \
@@ -167,24 +182,41 @@ generate_from_archetype() {
 
   # Add DAML Java bindings required dependency to POM
   local bindings_dep=$(get_daml_bindings_dep)
-  bindings_dep=${bindings_dep//$'\n'/\\$'\n'}   # escape \n with \\n for sed to work
+  bindings_dep=${bindings_dep//$'\n'/\\$'\n'} # just escape \n with \\n for sed to work
   sed -i "s|<dependencies>|<dependencies>\n${bindings_dep}|" "$pom_file"
 }
 
-# Create an empty Maven project for generated bindings
+#---
+# Create an empty Maven project for generated bindings.
+#---
 create_maven_project() {
   (
-    local pom_file="${PWD}/${__output}/${PROJECT_NAME}/pom.xml"
-
-    mkdir -p "$__output"
-    cd "$__output"
-    [[ -f "$pom_file" ]] || generate_from_archetype "$pom_file"
+    local pom_file=$(pom_file_path)
+    mkdir -p "${PROJECT_ROOT}/${__output}"
+    cd "${PROJECT_ROOT}/${__output}"
+    [[ -f "$pom_file" ]] || generate_from_archetype
   )
+}
+
+#---
+# Populate POM with <distributionManagement> reading it from a file.
+#---
+populate_maven_distributionManagement() {
+  [[ ! -f "$DISTRIBUTION_MANAGEMENT_FILE" ]] &&
+    echo "Error: Missing file ${DISTRIBUTION_MANAGEMENT_FILE}" &&
+    echo "Define a piece of XML with the content, i.e. single or multiple <repository>, to be included in <distributionManagement> of the pom.xml." &&
+    exit 21
+
+  local dist_management=$(cat "$DISTRIBUTION_MANAGEMENT_FILE")
+  dist_management=${dist_management//$'\n'/\\$'\n'} # just escape \n with \\n for sed to work
+
+  sed -i "s|</project>|${dist_management}\n</project>|" "$(pom_file_path)"
 }
 
 mvn_build() {
   (
-    cd "${__output}/${PROJECT_NAME}"
+    cd "${PROJECT_ROOT}/${__output}/${PROJECT_NAME}"
+    [[ "$__mvncommand" == "deploy" ]] && populate_maven_distributionManagement
     mvn $__mvncommand
   )
 }
@@ -206,9 +238,11 @@ main() {
 # Constants
 DAML_YAML="daml.yaml"
 VALID_MVNCOMMANDS=("package" "install" "deploy")
+PROJECT_ROOT="$PWD"
+DISTRIBUTION_MANAGEMENT_FILE="${PROJECT_ROOT}/pom-distributionManagement.xml"
 
 # Parse arguments
-eval "$(docopt "$@")"   # See https://github.com/andsens/docopt.sh for the magic :)
+eval "$(docopt "$@")" # See https://github.com/andsens/docopt.sh for the magic :)
 
 check_env
 check_args
