@@ -12,8 +12,9 @@ It generates the package (mvn package) for the current directory DAML project.
     Options:
       -c --mvncommand=<maven subcommand>  Possible values are `install` and `deploy` which directly binds to Maven [default: package].
       -o --output=<dir>                   The output directory for the bindings generation [default: daml.java].
+      -r --release                        Generate a non-SNAPSHOT version (a release).
 
-    NOTE: When using the --mvncommand=deploy a file dependencyManagement.xml defining the POM section is required. This file must be in the project root.
+    NOTE: When using the --mvncommand=deploy a file pom-distributionManagement.xml defining the POM section is required. This file must be in the project root.
 '
 
 # docopt parser below, refresh this parser with `docopt.sh generate-java-bindings`
@@ -83,8 +84,13 @@ if ! "node_$node_idx"; then left=("${initial_left[@]}"); ((testdepth--)) || true
 return 1; fi; done; if [[ $((--testdepth)) -eq 0 ]]; then
 left=("${initial_left[@]}"); for node_idx in "$@"; do "node_$node_idx"; done; fi
 return 0; }; optional() { local node_idx; for node_idx in "$@"; do
-"node_$node_idx"; done; return 0; }; value() { local i
+"node_$node_idx"; done; return 0; }; switch() { local i
 for i in "${!left[@]}"; do local l=${left[$i]}
+if [[ ${parsed_params[$l]} = "$2" ]]; then
+left=("${left[@]:0:$i}" "${left[@]:((i+1))}")
+[[ $testdepth -gt 0 ]] && return 0; if [[ $3 = true ]]; then
+eval "((var_$1++))" || true; else eval "var_$1=true"; fi; return 0; fi; done
+return 1; }; value() { local i; for i in "${!left[@]}"; do local l=${left[$i]}
 if [[ ${parsed_params[$l]} = "$2" ]]; then
 left=("${left[@]:0:$i}" "${left[@]:((i+1))}")
 [[ $testdepth -gt 0 ]] && return 0; local value
@@ -93,23 +99,25 @@ eval "var_$1+=($value)"; else eval "var_$1=$value"; fi; return 0; fi; done
 return 1; }; stdout() { printf -- "cat <<'EOM'\n%s\nEOM\n" "$1"; }; stderr() {
 printf -- "cat <<'EOM' >&2\n%s\nEOM\n" "$1"; }; error() {
 [[ -n $1 ]] && stderr "$1"; stderr "$usage"; _return 1; }; _return() {
-printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:674}
-usage=${DOC:114:57}; digest=86237; shorts=(-o -c); longs=(--output --mvncommand)
-argcounts=(1 1); node_0(){ value __output 0; }; node_1(){ value __mvncommand 1
-}; node_2(){ value _basepackage_ a; }; node_3(){ optional 0 1; }; node_4(){
-optional 3; }; node_5(){ required 4 2; }; node_6(){ required 5; }
-cat <<<' docopt_exit() { [[ -n $1 ]] && printf "%s\n" "$1" >&2
-printf "%s\n" "${DOC:114:57}" >&2; exit 1; }'; unset var___output \
-var___mvncommand var__basepackage_; parse 6 "$@"
+printf -- "exit %d\n" "$1"; exit "$1"; }; set -e; trimmed_doc=${DOC:0:767}
+usage=${DOC:114:57}; digest=302cc; shorts=(-c -o -r)
+longs=(--mvncommand --output --release); argcounts=(1 1 0); node_0(){
+value __mvncommand 0; }; node_1(){ value __output 1; }; node_2(){
+switch __release 2; }; node_3(){ value _basepackage_ a; }; node_4(){
+optional 0 1 2; }; node_5(){ optional 4; }; node_6(){ required 5 3; }; node_7(){
+required 6; }; cat <<<' docopt_exit() { [[ -n $1 ]] && printf "%s\n" "$1" >&2
+printf "%s\n" "${DOC:114:57}" >&2; exit 1; }'; unset var___mvncommand \
+var___output var___release var__basepackage_; parse 7 "$@"
 local prefix=${DOCOPT_PREFIX:-''}; local docopt_decl=1
-[[ $BASH_VERSION =~ ^4.3 ]] && docopt_decl=2; unset "${prefix}__output" \
-"${prefix}__mvncommand" "${prefix}_basepackage_"
-eval "${prefix}"'__output=${var___output:-daml.java}'
+[[ $BASH_VERSION =~ ^4.3 ]] && docopt_decl=2; unset "${prefix}__mvncommand" \
+"${prefix}__output" "${prefix}__release" "${prefix}_basepackage_"
 eval "${prefix}"'__mvncommand=${var___mvncommand:-package}'
+eval "${prefix}"'__output=${var___output:-daml.java}'
+eval "${prefix}"'__release=${var___release:-false}'
 eval "${prefix}"'_basepackage_=${var__basepackage_:-}'; local docopt_i=0
 for ((docopt_i=0;docopt_i<docopt_decl;docopt_i++)); do
-declare -p "${prefix}__output" "${prefix}__mvncommand" "${prefix}_basepackage_"
-done; }
+declare -p "${prefix}__mvncommand" "${prefix}__output" "${prefix}__release" \
+"${prefix}_basepackage_"; done; }
 # docopt parser above, complete command for generating this parser is `docopt.sh generate-java-bindings`
 
 
@@ -172,9 +180,6 @@ generate_from_archetype() {
     -DarchetypeArtifactId="maven-archetype-quickstart" &&
   find . -type f -name '*.java' | xargs rm -f   # rm code from archetype
 
-  # Set version from daml.yaml
-  sed -i -e "s|<version>1.0-SNAPSHOT</version>|<version>${CONTRACT_VERSION}-SNAPSHOT</version>|" "$pom_file"
-
   # Fix compiler version
   sed -i -e 's/<maven.compiler.source>1.7/<maven.compiler.source>1.8/' \
          -e 's/<maven.compiler.target>1.7/<maven.compiler.target>1.8/' \
@@ -199,6 +204,14 @@ create_maven_project() {
 }
 
 #---
+# Populate POM with artifact <version> taking it from daml.yaml contract version.
+#---
+populate_artifact_version() {
+  local version=$([[ $__release == "true" ]] && echo "$CONTRACT_VERSION" || echo "${CONTRACT_VERSION}-SNAPSHOT")
+  sed -i "0,/<version>/{s|<version>.*</version>|<version>${version}</version>|}" "$(pom_file_path)"
+}
+
+#---
 # Populate POM with <distributionManagement> reading it from a file.
 #---
 populate_maven_distributionManagement() {
@@ -215,8 +228,10 @@ populate_maven_distributionManagement() {
 
 mvn_build() {
   (
-    cd "${PROJECT_ROOT}/${__output}/${PROJECT_NAME}"
+    populate_artifact_version
     [[ "$__mvncommand" == "deploy" ]] && populate_maven_distributionManagement
+
+    cd "${PROJECT_ROOT}/${__output}/${PROJECT_NAME}"
     mvn $__mvncommand
   )
 }
