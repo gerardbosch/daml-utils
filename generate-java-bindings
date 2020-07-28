@@ -121,6 +121,12 @@ declare -p "${prefix}__mvncommand" "${prefix}__output" "${prefix}__release" \
 # docopt parser above, complete command for generating this parser is `docopt.sh generate-java-bindings`
 
 
+check_args() {
+  if ! printf '%s\n' "${VALID_MVNCOMMANDS[@]}" | grep --quiet -P "^${__mvncommand}$"; then
+    docopt_exit "Invalid value for --mvncommand: ${__mvncommand}"
+  fi
+}
+
 check_env() {
   # Check daml
   [[ ! -x "$(command -v daml)" ]] &&
@@ -130,12 +136,6 @@ check_env() {
   [[ ! -x "$(command -v mvn)" ]] &&
     echo "mvn command not found in PATH. Install Maven and assure it is on PATH. You can install it with sdkman.io if you like :)" &&
     exit 12
-}
-
-check_args() {
-  if ! printf '%s\n' "${VALID_MVNCOMMANDS[@]}" | grep --quiet -P "^${__mvncommand}$"; then
-    docopt_exit "Invalid value for --mvncommand: ${__mvncommand}"
-  fi
 }
 
 #---
@@ -238,6 +238,8 @@ mvn_build() {
 
 main() {
   echo -e "\nGenerating Maven library with DAML bindings...\n"
+  echo "Binding generator called with the following command/arguments:"
+  echo "  $0 $@"
 
   create_maven_project
 
@@ -259,8 +261,8 @@ DISTRIBUTION_MANAGEMENT_FILE="${PROJECT_ROOT}/pom-distributionManagement.xml"
 # Parse arguments
 eval "$(docopt "$@")" # See https://github.com/andsens/docopt.sh for the magic :)
 
-check_env
 check_args
+check_env
 PROJECT_NAME=$(grep '^name:' "$DAML_YAML" | cut -d ' ' -f2)
 set_daml_versions
 SDK_VERSION=${VERSIONS[0]}
