@@ -212,9 +212,20 @@ populate_artifact_version() {
 }
 
 #---
+# Populate POM with required plugins. These are read from a file.
+#---
+populate_pom_plugins() {
+  plugins=$(cat "${GENERATOR_HOME}/resources/pom-plugins.xml")
+  plugins=${plugins//$'\n'/\\$'\n'} # just escape \n with \\n for sed to work
+
+  sed -i "s|  </build>|${plugins}\n  </build>|" "$(pom_file_path)"
+  sed -i "s|<file>DAR_FILE_PLACEHOLDER</file>|<file>${PROJECT_ROOT}/${dar_file}</file>|" "$(pom_file_path)"
+}
+
+#---
 # Populate POM with <distributionManagement> reading it from a file.
 #---
-populate_maven_distributionManagement() {
+populate_pom_distributionManagement() {
   [[ ! -f "$DISTRIBUTION_MANAGEMENT_FILE" ]] &&
     echo "Error: Missing file ${DISTRIBUTION_MANAGEMENT_FILE}" &&
     echo "Define a piece of XML with the content, i.e. single or multiple <repository>, to be included in <distributionManagement> of the pom.xml." &&
@@ -229,7 +240,8 @@ populate_maven_distributionManagement() {
 mvn_build() {
   (
     populate_artifact_version
-    [[ "$__mvncommand" == "deploy" ]] && populate_maven_distributionManagement
+    populate_pom_plugins
+    [[ "$__mvncommand" == "deploy" ]] && populate_pom_distributionManagement
 
     cd "${PROJECT_ROOT}/${__output}/${PROJECT_NAME}"
     mvn $__mvncommand
@@ -240,11 +252,12 @@ main() {
   echo -e "\nGenerating Maven library with DAML bindings...\n"
   echo "Binding generator called with the following command/arguments:"
   echo "  $0 $@"
+  echo
 
   create_maven_project
 
   echo -e "\n*****************\nBuilding DAR...\n"
-  local dar_file=$(daml build | sed --quiet --regexp-extended -e 's/Created\s+(.*\.dar)/\1/p')
+  dar_file=$(daml build | sed --quiet --regexp-extended -e 's/Created\s+(.*\.dar)/\1/p')
 
   # and generate bindings into Maven project src dir
   daml codegen java -o "${__output}/${PROJECT_NAME}/src/main/java" "${dar_file}=${_basepackage_}"
@@ -256,6 +269,7 @@ main() {
 DAML_YAML="daml.yaml"
 VALID_MVNCOMMANDS=("package" "install" "deploy")
 PROJECT_ROOT="$PWD"
+GENERATOR_HOME=$(dirname $0)
 DISTRIBUTION_MANAGEMENT_FILE="${PROJECT_ROOT}/pom-distributionManagement.xml"
 
 # Parse arguments
